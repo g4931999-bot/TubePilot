@@ -1,16 +1,31 @@
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+if (keystorePropertiesFile.isFile) {
+    keystorePropertiesFile.inputStream().use(keystoreProperties::load)
+}
+val releaseStoreFile =
+    keystoreProperties.getProperty("storeFile")
+        ?.takeIf(String::isNotBlank)
+        ?.let(::file)
+val releaseSigningConfigured =
+    listOf("keyAlias", "keyPassword", "storePassword")
+        .all { !keystoreProperties.getProperty(it).isNullOrBlank() } &&
+        releaseStoreFile?.isFile == true
+
+if (!releaseSigningConfigured) {
+    logger.warn(
+        "Release keystore is missing or incomplete; the release APK will use the debug signing key. " +
+            "Configure android/key.properties for a Play Store release."
+    )
 }
 
 android {
@@ -32,11 +47,13 @@ android {
         versionName = flutter.versionName
     }
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String?
+        if (releaseSigningConfigured) {
+            create("release") {
+                keyAlias = requireNotNull(keystoreProperties.getProperty("keyAlias"))
+                keyPassword = requireNotNull(keystoreProperties.getProperty("keyPassword"))
+                storeFile = requireNotNull(releaseStoreFile)
+                storePassword = requireNotNull(keystoreProperties.getProperty("storePassword"))
+            }
         }
     }
     buildTypes {
@@ -45,13 +62,18 @@ android {
             isShrinkResources = false
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig =
+                if (releaseSigningConfigured) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
     }
 }

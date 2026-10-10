@@ -14,19 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "348714273929-3658rnjkqgrpg1svij40l4ojm1k45aoh.apps.googleusercontent.com",
+          "client_id": "348714273929-eq65ksphl2gq36ni5ijg9dfpa8qdkisu.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.tubepilot.app",
-            "certificate_hash": "31e5b8765822a8fb05cdd69d2cf58c0550dc355f"
-          }
-        },
-        {
-          "client_id": "348714273929-l9pqftt4pcqsimk4pth89v8qe7hmpqhf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.tubepilot.app",
-            "certificate_hash": "b26940231c40c7ceb2f06dee777040132ff9a1bc"
+            "certificate_hash": "360a93c76fe7f60c4b63fcb2db26efc921e12f1d"
           }
         },
         {
@@ -35,6 +27,14 @@
           "android_info": {
             "package_name": "com.tubepilot.app",
             "certificate_hash": "6fb2abaf724953412ee27c51a3458ef3a7985767"
+          }
+        },
+        {
+          "client_id": "348714273929-v59gj35o09i9jdcc18vvnut7gqcqtkhc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tubepilot.app",
+            "certificate_hash": "15bc64214a74e946687f3bdde5f9b0c56a4cd47c"
           }
         },
         {

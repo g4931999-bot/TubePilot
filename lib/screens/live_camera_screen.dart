@@ -54,6 +54,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
   int _secondsElapsed = 0;
   bool _muted = false;
   bool _stopping = false;
+  final GlobalKey _previewKey = GlobalKey();
+  Widget? _cameraView;
+  int _ytMisses = 0;
 
   // YouTube connection ki asli sthiti
   bool _trying = false;        // connect/fallback chal raha hai — callbacks se session band mat karo
@@ -173,7 +176,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
     try {
       final controller = ApiVideoLiveStreamController(
         initialAudioConfig: AudioConfig(),
-        initialVideoConfig: VideoConfig.withDefaultBitrate(),
+        initialVideoConfig: VideoConfig(
+          bitrate: 1500 * 1000,
+          resolution: Resolution.RESOLUTION_720,
+          fps: 30,
+        ),
         onConnectionSuccess: () => debugPrint('[CameraLive] RTMP connection success'),
         onConnectionFailed: (String error) {
           debugPrint('[CameraLive] RTMP connection failed: $error');
@@ -198,6 +205,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
       }
       setState(() {
         _controller = controller;
+        _cameraView = ApiVideoCameraPreview(key: _previewKey, controller: controller, fit: BoxFit.cover);
         _stage = _CamStage.ready;
       });
     } catch (e) {
@@ -359,7 +367,12 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
       final res = await ApiService.instance.getLiveStreamStatus(id);
       if (!mounted) return;
       setState(() {
-        _ytActive = res['streamStatus'] == 'active';
+        if (res['streamStatus'] == 'active') {
+          _ytMisses = 0;
+          _ytActive = true;
+        } else if (++_ytMisses >= 2) {
+          _ytActive = false;
+        }
         _ytHealth = res['health']?.toString();
       });
     } catch (_) {
@@ -518,7 +531,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
         fit: StackFit.expand,
         children: [
           Container(color: Colors.black),
-          ApiVideoCameraPreview(controller: c, fit: BoxFit.cover),
+          _cameraView ?? ApiVideoCameraPreview(key: _previewKey, controller: c, fit: BoxFit.cover),
           overlay,
         ],
       ),
