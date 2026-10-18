@@ -155,6 +155,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   // _MetricCard padding/spacing below — so the content
                   // fits with room to spare instead of overflowing.
                   GridView.count(
+                    padding: EdgeInsets.zero,
                     crossAxisCount: 2,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -191,7 +192,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   // ⚠️ FIX (Boss request — "gap hai use hatao aur
                   // componets ko aur upar karo"): 12 → 6, so the chart
                   // card sits right under the stats grid.
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 12),
 
                   // ---------------- 14-day upload trend chart ----------------
                   Container(

@@ -37,7 +37,9 @@ enum _MockupTab { instagram, youtube, facebook }
 
 class _VisualAnalyzerScreenState extends State<VisualAnalyzerScreen> {
   File? _image;
-  final _titleCtrl = TextEditingController(text: 'Your Video Title Here');
+  final _titleCtrl = TextEditingController();
+  String? _channelName;
+  String? _channelThumb;
   final _MockupTab _tab = _MockupTab.youtube;
   bool _analyzing = false;
   double? _contrastScore; // 0-100
@@ -60,6 +62,7 @@ class _VisualAnalyzerScreenState extends State<VisualAnalyzerScreen> {
   void initState() {
     super.initState();
     _loadDiamondBalance();
+    _loadChannel();
   }
 
   @override
@@ -67,6 +70,40 @@ class _VisualAnalyzerScreenState extends State<VisualAnalyzerScreen> {
     _titleCtrl.dispose();
     super.dispose();
   }
+
+  Future<void> _loadChannel() async {
+    try {
+      final res = await ApiService.instance.getYoutubeChannel();
+      final ch = res['success'] == true ? res['channel'] : null;
+      if (ch is Map && mounted) {
+        setState(() {
+          _channelName = (ch['channelTitle'] ?? '').toString().trim();
+          _channelThumb = (ch['thumbnail'] ?? '').toString().trim();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Widget _channelAvatar(double radius) {
+    final name = (_channelName ?? '').trim();
+    final fallback = CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.purple,
+      child: name.isEmpty
+          ? null
+          : Text(String.fromCharCode(name.runes.first).toUpperCase(),
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: radius * 0.9)),
+    );
+    final url = _channelThumb ?? '';
+    if (url.isEmpty) return fallback;
+    return ClipOval(
+      child: Image.network(url, width: radius * 2, height: radius * 2, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback),
+    );
+  }
+
+  String get _youtubeSubtitle =>
+      (_channelName ?? '').isNotEmpty ? _channelName! : context.tr('visual_your_channel_views');
 
   Future<void> _loadDiamondBalance() async {
     try {
@@ -266,7 +303,9 @@ class _VisualAnalyzerScreenState extends State<VisualAnalyzerScreen> {
   }
 
   Widget _mockupFrame() {
-    final title = _titleCtrl.text.trim().isEmpty ? 'Your Video Title Here' : _titleCtrl.text.trim();
+    final typedTitle = _titleCtrl.text.trim();
+    final hasTitle = typedTitle.isNotEmpty;
+    final title = hasTitle ? typedTitle : 'Your Video Title Here';
     switch (_tab) {
       case _MockupTab.instagram:
         return _phoneFrame(
@@ -293,13 +332,13 @@ class _VisualAnalyzerScreenState extends State<VisualAnalyzerScreen> {
             Padding(
               padding: const EdgeInsets.all(10),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const CircleAvatar(radius: 16, backgroundColor: AppColors.purple),
+                _channelAvatar(16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: hasTitle ? null : context.surfaces.textDim)),
                     const SizedBox(height: 3),
-                    Text(context.tr('visual_your_channel_views'), style: TextStyle(color: context.surfaces.textDim, fontSize: 11)),
+                    Text(_youtubeSubtitle, style: TextStyle(color: context.surfaces.textDim, fontSize: 11)),
                   ]),
                 ),
               ]),

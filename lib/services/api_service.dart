@@ -549,6 +549,26 @@ class ApiService {
   // ------ DELETE /api/analytics/competitors/:id ------ //
   Future<Map<String, dynamic>> deleteCompetitor(String id) =>
       _request('/analytics/competitors/$id', method: 'DELETE');
+
+  // ------ GET /api/analytics/competitors/dashboard ------ //
+  Future<Map<String, dynamic>> getCompetitorDashboard() =>
+      _request('/analytics/competitors/dashboard');
+
+  // ------ GET /api/analytics/competitors/:id ------ //
+  Future<Map<String, dynamic>> getCompetitorDetail(String id) =>
+      _request('/analytics/competitors/$id');
+
+  // ------ GET /api/analytics/competitors/videos?sort= (or /:id/videos) ------ //
+  Future<Map<String, dynamic>> getCompetitorVideos({String? competitorId, String sort = 'most_viewed', int limit = 30}) {
+    final base = competitorId == null
+        ? '/analytics/competitors/videos'
+        : '/analytics/competitors/$competitorId/videos';
+    return _request('$base?sort=$sort&limit=$limit');
+  }
+
+  // ------ GET /api/analytics/competitors/video/:videoId (description, tags) ------ //
+  Future<Map<String, dynamic>> getCompetitorVideoDetails(String videoId) =>
+      _request('/analytics/competitors/video/$videoId');
   // ------ GET /api/analytics/audit ------ //
   Future<Map<String, dynamic>> getChannelAudit() => _request('/analytics/audit');
 

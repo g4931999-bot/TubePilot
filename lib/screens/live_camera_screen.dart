@@ -57,6 +57,10 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
   final GlobalKey _previewKey = GlobalKey();
   Widget? _cameraView;
   int _ytMisses = 0;
+  String? _lastKey;            // auto-restart ke liye
+  String? _lastUrl;
+  int _restarts = 0;
+  bool _restarting = false;
 
   // YouTube connection ki asli sthiti
   bool _trying = false;        // connect/fallback chal raha hai — callbacks se session band mat karo
@@ -177,8 +181,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
       final controller = ApiVideoLiveStreamController(
         initialAudioConfig: AudioConfig(),
         initialVideoConfig: VideoConfig(
-          bitrate: 1500 * 1000,
-          resolution: Resolution.RESOLUTION_720,
+          bitrate: 1000 * 1000,
+          resolution: Resolution.RESOLUTION_480,
           fps: 30,
         ),
         onConnectionSuccess: () => debugPrint('[CameraLive] RTMP connection success'),
@@ -242,6 +246,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
         throw ApiException(_t('live_cam_no_details'));
       }
       _streamId = createdStreamId; // ab se koi bhi band-karne wala raasta server session bhi band karega
+      LiveCameraScreen.active = true;
 
       final usedUrl = await _connectToYouTube(
         controller,
@@ -249,6 +254,9 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
         key: streamKey,
         urls: [rtmpUrl, rtmpsUrl],
       );
+      _lastKey = streamKey;
+      _lastUrl = usedUrl;
+      _restarts = 0;
       if (usedUrl == null) {
         throw ApiException(
           _rtmpError != null
@@ -266,6 +274,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
         _secondsAllowed = (res['secondsAllowed'] as num?)?.toInt() ?? 0;
         _secondsElapsed = 0;
         _ytActive = true;
+        _ytMisses = 0;
         _connectInfo = usedUrl;
         _stage = _CamStage.live;
       });
@@ -274,6 +283,7 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
     } catch (e) {
       // Server par session ban chuka ho to release karo (kabhi live nahi hua to slot wapas milta hai).
       if (createdStreamId != null) {
+        LiveCameraScreen.active = false;
         try {
           await controller.stopStreaming();
         } catch (_) {}
@@ -369,16 +379,45 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
       setState(() {
         if (res['streamStatus'] == 'active') {
           _ytMisses = 0;
+          _restarts = 0;
           _ytActive = true;
         } else if (++_ytMisses >= 2) {
           _ytActive = false;
         }
         _ytHealth = res['health']?.toString();
       });
+      if (_ytMisses >= 2) _restartStreaming();
     } catch (_) {
       // ignore
     } finally {
       _polling = false;
+    }
+  }
+
+  /// YouTube ko data aana band ho jaye (RTMP connected dikhta hai par encoder atak gaya)
+  /// to bina session band kiye stream dobara shuru karta hai (max 3 baar).
+  Future<void> _restartStreaming() async {
+    final c = _controller;
+    final key = _lastKey;
+    final url = _lastUrl;
+    if (_restarting || _stopping || c == null || key == null || url == null) return;
+    if (_restarts >= 3) return;
+    _restarting = true;
+    _restarts++;
+    _trying = true; // callbacks session band na karein
+    debugPrint('[CameraLive] noData — restart #$_restarts');
+    try {
+      try {
+        await c.stopStreaming();
+      } catch (_) {}
+      await Future.delayed(const Duration(seconds: 1));
+      await c.startStreaming(streamKey: key, url: url);
+      _ytMisses = 0;
+    } catch (e) {
+      debugPrint('[CameraLive] restart failed: $e');
+    } finally {
+      _trying = false;
+      _restarting = false;
     }
   }
 
@@ -487,9 +526,8 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
         return _buildError();
       case _CamStage.ready:
       case _CamStage.starting:
-        return _buildReady();
       case _CamStage.live:
-        return _buildLive();
+        return _buildMain();
     }
   }
 
@@ -553,7 +591,11 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
     );
   }
 
-  Widget _buildReady() {
+  /// Ready, starting aur live — teeno ek hi layout use karte hain taaki camera preview
+  /// (native view) kabhi re-parent na ho. Pehle live hote hi layout badalta tha, preview
+  /// dobara bantaa tha aur freeze ho jata tha.
+  Widget _buildMain() {
+    final live = _stage == _CamStage.live;
     final starting = _stage == _CamStage.starting;
 
     return Column(
@@ -562,157 +604,167 @@ class _LiveCameraScreenState extends State<LiveCameraScreen> with WidgetsBinding
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              LiveLimitBanner(limits: _limits, waitSeconds: _waitSeconds),
-              const SizedBox(height: 14),
+              live ? const SizedBox(height: 0) : LiveLimitBanner(limits: _limits, waitSeconds: _waitSeconds),
+              SizedBox(height: live ? 0 : 14),
               AspectRatio(
                 aspectRatio: 3 / 4,
-                child: _preview(
-                  overlay: Positioned(
-                    top: 10,
-                    right: 10,
-                    child: _roundButton(Icons.cameraswitch_rounded, _switchCamera),
-                  ),
-                ),
+                child: _preview(overlay: live ? _liveOverlay() : _readyOverlay()),
               ),
               const SizedBox(height: 14),
-              TextField(
-                controller: _titleCtrl,
-                maxLength: 100,
-                decoration: InputDecoration(
-                  labelText: context.tr('live_stream_title_label'),
-                  hintText: context.tr('live_cam_title_hint'),
-                ),
-              ),
-              if (starting && _connectInfo.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(_connectInfo, style: const TextStyle(color: AppColors.purple, fontSize: 12.5, fontWeight: FontWeight.w600)),
-                ),
-              Text(
-                context.tr('live_cam_note'),
-                style: TextStyle(color: context.surfaces.textDim, fontSize: 12),
-              ),
+              if (!live) ..._readyExtras(starting),
             ],
           ),
         ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            border: Border(top: BorderSide(color: context.surfaces.border)),
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: (starting || _blocked) ? null : _goLive,
-              icon: starting
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.podcasts_rounded, size: 18),
-              label: Text(context.tr(starting ? 'live_btn_starting' : 'live_btn_go_live')),
-            ),
-          ),
-        ),
+        live ? _liveBottomBar() : _readyBottomBar(starting),
       ],
     );
   }
 
-  Widget _buildLive() {
-    final remaining = (_secondsAllowed - _secondsElapsed).clamp(0, _secondsAllowed);
+  Widget _readyOverlay() {
+    return Positioned(
+      top: 10,
+      right: 10,
+      child: _roundButton(Icons.cameraswitch_rounded, _switchCamera),
+    );
+  }
 
-    return Column(
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: _preview(
-              overlay: Stack(
+  List<Widget> _readyExtras(bool starting) {
+    return [
+      TextField(
+        controller: _titleCtrl,
+        maxLength: 100,
+        decoration: InputDecoration(
+          labelText: context.tr('live_stream_title_label'),
+          hintText: context.tr('live_cam_title_hint'),
+        ),
+      ),
+      if (starting && _connectInfo.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(_connectInfo, style: const TextStyle(color: AppColors.purple, fontSize: 12.5, fontWeight: FontWeight.w600)),
+        ),
+      Text(
+        context.tr('live_cam_note'),
+        style: TextStyle(color: context.surfaces.textDim, fontSize: 12),
+      ),
+    ];
+  }
+
+  Widget _readyBottomBar(bool starting) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: context.surfaces.border)),
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: (starting || _blocked) ? null : _goLive,
+          icon: starting
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.podcasts_rounded, size: 18),
+          label: Text(context.tr(starting ? 'live_btn_starting' : 'live_btn_go_live')),
+        ),
+      ),
+    );
+  }
+
+  Widget _liveOverlay() {
+    return Stack(
+        children: [
+          Positioned(
+            top: 10,
+            left: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(999)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(999)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 9,
-                            height: 9,
-                            decoration: BoxDecoration(color: _ytActive ? Colors.redAccent : Colors.orange, shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _ytActive ? 'LIVE  ${formatCountdown(_secondsElapsed)}' : context.tr('live_cam_no_data_badge'),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5),
-                          ),
-                        ],
-                      ),
-                    ),
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(color: _ytActive ? Colors.redAccent : Colors.orange, shape: BoxShape.circle),
                   ),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Column(
-                      children: [
-                        _roundButton(Icons.cameraswitch_rounded, _switchCamera),
-                        const SizedBox(height: 8),
-                        _roundButton(_muted ? Icons.mic_off_rounded : Icons.mic_rounded, _toggleMute,
-                            color: _muted ? Colors.redAccent : Colors.white),
-                        if (_watchUrl != null) ...[
-                          const SizedBox(height: 8),
-                          _roundButton(
-                            Icons.open_in_new_rounded,
-                            () => launchUrl(Uri.parse(_watchUrl!), mode: LaunchMode.externalApplication),
-                          ),
-                        ],
-                      ],
-                    ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _ytActive ? 'LIVE  ${formatCountdown(_secondsElapsed)}' : context.tr('live_cam_no_data_badge'),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12.5),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            border: Border(top: BorderSide(color: context.surfaces.border)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                context.tr('live_remaining').replaceAll('%1', formatCountdown(remaining)) +
-                    (_isFreeTrial ? context.tr('live_free_trial_suffix') : '') +
-                    (_waitSeconds > 0 ? context.tr('live_cam_next_short').replaceAll('%1', formatCountdown(_waitSeconds)) : ''),
-                style: TextStyle(color: context.surfaces.textDim, fontSize: 12.5),
-              ),
-              if (_ytHealth != null || _connectInfo.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    context.tr('live_cam_health').replaceAll('%1', _ytHealth ?? '-').replaceAll('%2', _connectInfo),
-                    style: TextStyle(color: context.surfaces.textDim, fontSize: 10.5),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Column(
+              children: [
+                _roundButton(Icons.cameraswitch_rounded, _switchCamera),
+                if (!_ytActive) ...[
+                  const SizedBox(height: 8),
+                  _roundButton(Icons.refresh_rounded, () {
+                    _restarts = 0;
+                    _restartStreaming();
+                  }, color: Colors.orangeAccent),
+                ],
+                const SizedBox(height: 8),
+                _roundButton(_muted ? Icons.mic_off_rounded : Icons.mic_rounded, _toggleMute,
+                    color: _muted ? Colors.redAccent : Colors.white),
+                if (_watchUrl != null) ...[
+                  const SizedBox(height: 8),
+                  _roundButton(
+                    Icons.open_in_new_rounded,
+                    () => launchUrl(Uri.parse(_watchUrl!), mode: LaunchMode.externalApplication),
                   ),
-                ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
-                  onPressed: _stopping ? null : () => _endSession(message: _t('live_cam_stopped')),
-                  icon: const Icon(Icons.stop_circle_rounded, size: 18),
-                  label: Text(context.tr('live_cam_btn_stop')),
-                ),
-              ),
-            ],
+                ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      );
+  }
+
+  Widget _liveBottomBar() {
+    final remaining = (_secondsAllowed - _secondsElapsed).clamp(0, _secondsAllowed);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: context.surfaces.border)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            context.tr('live_remaining').replaceAll('%1', formatCountdown(remaining)) +
+                (_isFreeTrial ? context.tr('live_free_trial_suffix') : '') +
+                (_waitSeconds > 0 ? context.tr('live_cam_next_short').replaceAll('%1', formatCountdown(_waitSeconds)) : ''),
+            style: TextStyle(color: context.surfaces.textDim, fontSize: 12.5),
+          ),
+          if (_ytHealth != null || _connectInfo.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                context.tr('live_cam_health').replaceAll('%1', _ytHealth ?? '-').replaceAll('%2', _connectInfo),
+                style: TextStyle(color: context.surfaces.textDim, fontSize: 10.5),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+              onPressed: _stopping ? null : () => _endSession(message: _t('live_cam_stopped')),
+              icon: const Icon(Icons.stop_circle_rounded, size: 18),
+              label: Text(context.tr('live_cam_btn_stop')),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
