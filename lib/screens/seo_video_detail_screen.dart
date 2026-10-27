@@ -428,7 +428,11 @@ class _SeoVideoDetailScreenState extends State<SeoVideoDetailScreen> with Single
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: GradientButton(label: context.tr('apply_to_video_btn_label'), icon: Icons.send_rounded, onPressed: _hasPick ? _apply : () => showToast(context, context.tr('so_pick_first'), isError: true)),
+          child: SizedBox(
+            height: 54,
+            width: double.infinity,
+            child: GradientButton(label: context.tr('apply_to_video_btn_label'), icon: Icons.send_rounded, onPressed: _hasPick ? _apply : () => showToast(context, context.tr('so_pick_first'), isError: true)),
+          ),
         ),
       ),
       body: ListView(padding: const EdgeInsets.fromLTRB(20, 12, 20, 24), children: [

@@ -4,23 +4,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_cashfree_pg_sdk/api/cferrorresponse/cferrorresponse.dart';
 import 'package:flutter_cashfree_pg_sdk/api/cfpaymentgateway/cfpaymentgatewayservice.dart';
 import 'package:flutter_cashfree_pg_sdk/api/cfsession/cfsession.dart';
-import 'package:flutter_cashfree_pg_sdk/api/cfpayment/cfdropcheckoutpayment.dart';
+import 'package:flutter_cashfree_pg_sdk/api/cfpayment/cfwebcheckoutpayment.dart';
 import 'package:flutter_cashfree_pg_sdk/utils/cfenums.dart';
 import 'package:flutter_cashfree_pg_sdk/utils/cfexceptions.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../providers/language_provider.dart';
-import 'live_plans_screen.dart'; // ⚠️ NEW — top switcher se yahan jaate hain
+import 'live_plans_screen.dart';
 
-/// Renders each package's "What's included" checklist straight from the
-/// backend's `features` array (label + included flag) — see
-/// routes/diamond.js buildFeatureList(). Included → green tick; not
-/// included → grey cross, so the upgrade incentive is visible on the card
-/// itself. Labels now explicitly distinguish "Video SEO Optimizer"
-/// (unlocks on any paid pack) from "Channel SEO Score (Suggestions)"
-/// (unlocks only on ₹100+ / advance), matching the two different gates
-/// enforced server-side in routes/ai.js and routes/analytics.js.
 class DiamondStoreScreen extends StatefulWidget {
   const DiamondStoreScreen({super.key});
   @override
@@ -36,7 +28,7 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
   int? _payingDiamonds;
   CFEnvironment _cashfreeEnvironment = CFEnvironment.PRODUCTION;
   Timer? _paymentTimeoutTimer;
-  static const _paymentCallbackTimeout = Duration(seconds: 90);
+  static const _paymentCallbackTimeout = Duration(seconds: 120);
 
   final CFPaymentGatewayService _cfPaymentGatewayService = CFPaymentGatewayService();
 
@@ -87,29 +79,38 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
       final orderId = res['orderId'] as String;
       final paymentSessionId = res['paymentSessionId'] as String;
 
+      CFSession? session;
       try {
-        final session = CFSessionBuilder()
+        session = CFSessionBuilder()
             .setEnvironment(_cashfreeEnvironment)
             .setOrderId(orderId)
             .setPaymentSessionId(paymentSessionId)
             .build();
-
-        final cfDropCheckoutPayment = CFDropCheckoutPaymentBuilder()
-            .setSession(session)
-            .build();
-
-        _cfPaymentGatewayService.doPayment(cfDropCheckoutPayment);
-        _paymentTimeoutTimer?.cancel();
-        _paymentTimeoutTimer = Timer(_paymentCallbackTimeout, () {
-          if (!mounted || _payingDiamonds == null) return;
-          setState(() => _payingDiamonds = null);
-          showToast(context, 'Checkout didn\'t open — please check your connection and try again.', isError: true);
-        });
       } on CFException catch (e) {
         if (mounted) {
           setState(() => _payingDiamonds = null);
-          showToast(context, e.message ?? 'Could not open checkout.', isError: true);
+          showToast(context, 'Session error: ${e.message}', isError: true);
         }
+        return;
+      }
+
+      final cfWebCheckout = CFWebCheckoutPaymentBuilder()
+          .setSession(session!)
+          .build();
+
+      _cfPaymentGatewayService.doPayment(cfWebCheckout);
+      
+      _paymentTimeoutTimer?.cancel();
+      _paymentTimeoutTimer = Timer(_paymentCallbackTimeout, () {
+        if (!mounted || _payingDiamonds == null) return;
+        setState(() => _payingDiamonds = null);
+        showToast(context, 'Checkout timeout — please try again.', isError: true);
+      });
+
+    } on CFException catch (e) {
+      if (mounted) {
+        setState(() => _payingDiamonds = null);
+        showToast(context, e.message ?? 'Could not open checkout.', isError: true);
       }
     } catch (e) {
       if (mounted) {
@@ -130,14 +131,12 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
   }
 
   Future<void> _confirmWithBackend(String orderId, {String? sdkReportedError}) async {
-    const maxAttempts = 6;
+    const maxAttempts = 8;
     const delayBetweenAttempts = Duration(seconds: 3);
-
     try {
       for (int attempt = 1; attempt <= maxAttempts; attempt++) {
         final res = await ApiService.instance.verifyCashfreePayment(orderId);
         final status = res['status'];
-
         if (status == 'approved') {
           if (mounted) {
             showToast(context, context.tr('payment_submitted_msg'), isSuccess: true);
@@ -145,20 +144,13 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
           }
           return;
         }
-
         if (status == 'rejected') {
           if (mounted) showToast(context, sdkReportedError ?? 'Payment was not completed.', isError: true);
           return;
         }
-
-        if (attempt < maxAttempts) {
-          await Future.delayed(delayBetweenAttempts);
-        }
+        if (attempt < maxAttempts) await Future.delayed(delayBetweenAttempts);
       }
-
-      if (mounted) {
-        showToast(context, 'Payment is taking a bit longer than usual — it will be credited automatically once confirmed.', isError: false);
-      }
+      if (mounted) showToast(context, 'Payment will be credited automatically once confirmed.', isError: false);
     } catch (e) {
       if (mounted) showApiError(context, e);
     } finally {
@@ -167,9 +159,6 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
     }
   }
 
-  // ⚠️ NEW — top switcher: "Diamonds" (active, current screen) vs
-  // "Live Stream" (taps navigate to LivePlansScreen). Same visual language
-  // as everything else on this screen — pill-shaped segmented buttons.
   Widget _topSwitcher() {
     return Container(
       padding: const EdgeInsets.all(4),

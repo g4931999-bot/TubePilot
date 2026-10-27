@@ -39,7 +39,7 @@ dependencies:
   onesignal_flutter: ^5.2.4
 
   # Payment Gateway
-  flutter_cashfree_pg_sdk: ^2.4.0+52
+  flutter_cashfree_pg_sdk: ^2.2.9+47
 
   # Media permissions
   permission_handler: ^11.3.1

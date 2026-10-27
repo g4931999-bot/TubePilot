@@ -16,7 +16,9 @@ class ChannelVideoList extends StatefulWidget {
   final void Function(Map<String, dynamic> video) onSelect;
   /// Optional line under each tile (e.g. a cached score).
   final String? Function(Map<String, dynamic> video)? trailingText;
-  const ChannelVideoList({super.key, required this.onSelect, this.trailingText});
+  /// UPDATE17: Visual Analyzer look - no channel card, rounded card rows, tabs with icons.
+  final bool cardStyle;
+  const ChannelVideoList({super.key, required this.onSelect, this.trailingText, this.cardStyle = false});
   @override
   State<ChannelVideoList> createState() => _ChannelVideoListState();
 }
@@ -176,7 +178,7 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
     );
   }
 
-  Widget _tab(String key, bool shorts) {
+  Widget _tab(String key, bool shorts, {IconData? icon}) {
     final active = _shortsTab == shorts;
     return Expanded(
       child: GestureDetector(
@@ -188,7 +190,10 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
             borderRadius: BorderRadius.circular(12),
           ),
           alignment: Alignment.center,
-          child: Text(context.tr(key), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? Colors.white : context.surfaces.textDim)),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            if (icon != null) ...[Icon(icon, size: 18, color: active ? Colors.white : context.surfaces.textDim), const SizedBox(width: 6)],
+            Text(context.tr(key), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: active ? Colors.white : context.surfaces.textDim)),
+          ]),
         ),
       ),
     );
@@ -200,12 +205,7 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
     final ago = timeAgo(context, v['publishedAt']?.toString());
     final dur = _dur((v['durationSeconds'] as num?)?.toInt() ?? 0);
     final extra = widget.trailingText?.call(v);
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => widget.onSelect(v),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    final row = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
@@ -243,9 +243,19 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
               ],
             ]),
           ),
-          Icon(Icons.chevron_right_rounded, color: context.surfaces.textDim),
-        ]),
-      ),
+          Icon(Icons.chevron_right_rounded, color: widget.cardStyle ? AppColors.purple : context.surfaces.textDim),
+        ]);
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () => widget.onSelect(v),
+      child: widget.cardStyle
+          ? Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(border: Border.all(color: context.surfaces.border), borderRadius: BorderRadius.circular(16)),
+              child: row,
+            )
+          : Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: row),
     );
   }
 
@@ -270,12 +280,11 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
       Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
         child: Column(children: [
-          _channelCard(),
-          const SizedBox(height: 12),
+          if (!widget.cardStyle) ...[_channelCard(), const SizedBox(height: 12)],
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(color: context.surfaces.card2, borderRadius: BorderRadius.circular(14)),
-            child: Row(children: [_tab('sv_tab_all', false), _tab('sv_tab_shorts', true)]),
+            child: Row(children: [_tab('sv_tab_all', false, icon: widget.cardStyle ? Icons.image_rounded : null), _tab('sv_tab_shorts', true, icon: widget.cardStyle ? Icons.play_circle_outline_rounded : null)]),
           ),
           const SizedBox(height: 10),
           Row(children: [
@@ -310,7 +319,7 @@ class _ChannelVideoListState extends State<ChannelVideoList> {
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   itemCount: list.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: context.surfaces.border),
+                  separatorBuilder: (_, __) => widget.cardStyle ? const SizedBox.shrink() : Divider(height: 1, color: context.surfaces.border),
                   itemBuilder: (_, i) => _tile(list[i]),
                 ),
         ),

@@ -14,6 +14,7 @@ class VisualAnalyzerScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('visual_analyzer_title'))),
       body: ChannelVideoList(
+        cardStyle: true,
         onSelect: (v) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ThumbnailAnalysisScreen(video: v))),
       ),
     );
