@@ -128,6 +128,8 @@ class _UploadScreenState extends State<UploadScreen> {
   int uploadedCount = 0;
   int freeUploadsRemaining = 0;
   int diamondBalance = 0;
+  // UPDATE16: Smart Scheduler Auto-Slotting (real switch stored on the user, see routes/video.js)
+  bool autoSlotting = false;
 
   @override
   void initState() {
@@ -150,11 +152,14 @@ class _UploadScreenState extends State<UploadScreen> {
         ApiService.instance.dashboard(),
         ApiService.instance.getYoutubeChannel().catchError((_) => <String, dynamic>{}),
         ApiService.instance.getMetaStatus().catchError((_) => <String, dynamic>{}),
+        ApiService.instance.getAutoSlotting().catchError((_) => <String, dynamic>{}),
       ]);
       final dash = results[0];
       final yt = results[1];
       final meta = results[2];
+      final auto = results[3];
       setState(() {
+        autoSlotting = auto['enabled'] == true;
         freeUploadsRemaining = dash['data']?['remainingFreeUploads'] ?? 0;
         diamondBalance = dash['data']?['diamondBalance'] ?? 0;
         youtubeConnected = yt['success'] == true;
@@ -527,7 +532,7 @@ class _UploadScreenState extends State<UploadScreen> {
         return;
       }
     }
-    if (scheduleEnabled && scheduledAt == null) {
+    if (scheduleEnabled && scheduledAt == null && !autoSlotting) {
       showToast(context, context.tr('up_pick_schedule_error'), isError: true);
       return;
     }
@@ -541,6 +546,7 @@ class _UploadScreenState extends State<UploadScreen> {
     });
 
     final scheduledIso = scheduleEnabled ? scheduledAt?.toUtc().toIso8601String() : null;
+    final useAutoSlot = scheduleEnabled && autoSlotting;
     final effectivePostType = selectedPlatforms.contains('instagram') || selectedPlatforms.contains('facebook') ? postType : null;
 
     try {
@@ -567,7 +573,7 @@ class _UploadScreenState extends State<UploadScreen> {
           };
         }
 
-        await ApiService.instance.uploadVideo(
+        final upRes = await ApiService.instance.uploadVideo(
           videoPath: item.file.path,
           thumbnailPath: selectedPlatforms.contains('youtube') ? item.thumbFile?.path : null,
           platforms: selectedPlatforms.toList(),
@@ -575,11 +581,19 @@ class _UploadScreenState extends State<UploadScreen> {
           youtube: youtube,
           facebook: facebook,
           instagram: instagram,
+          autoSlot: useAutoSlot,
         );
         setState(() => uploadedCount = 1);
 
         if (!mounted) return;
-        showToast(context, context.tr('up_video_queued_success'), isSuccess: true);
+        final autoAt = DateTime.tryParse((upRes['autoSlotAt'] ?? '').toString())?.toLocal();
+        showToast(
+          context,
+          upRes['autoSlotted'] == true && autoAt != null
+              ? context.tr('up_auto_slotted_toast').replaceAll('%1', formatDateTime(autoAt.toIso8601String()))
+              : context.tr('up_video_queued_success'),
+          isSuccess: true,
+        );
         _resetForm();
       } else {
         // -------- Bulk: /videos/bulk-upload — backend auto-slots across
@@ -614,6 +628,7 @@ class _UploadScreenState extends State<UploadScreen> {
           postType: effectivePostType,
           items: items,
           preferredTime: preferredTime,
+          autoSlot: useAutoSlot,
         );
 
         final results = (res['results'] as List?) ?? [];
@@ -1003,6 +1018,20 @@ class _UploadScreenState extends State<UploadScreen> {
                         ] else ...[
                           const SizedBox(height: 10),
                           Text(context.tr('up_schedule_note'), style: TextStyle(color: context.surfaces.textDim, fontSize: 12.5)),
+                          if (autoSlotting) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: AppColors.purple.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+                              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const Icon(Icons.bolt_rounded, color: AppColors.purple, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(context.tr('up_auto_note'), style: const TextStyle(fontSize: 12.5, height: 1.4))),
+                              ]),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(context.tr('up_auto_fallback_label'), style: TextStyle(color: context.surfaces.textDim, fontSize: 12)),
+                          ],
                           const SizedBox(height: 10),
                           _pickerField(
                             value: scheduledAt == null ? context.tr('up_pick_datetime') : formatDateTime(scheduledAt!.toIso8601String()),

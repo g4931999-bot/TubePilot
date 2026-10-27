@@ -7,23 +7,7 @@
     <!-- Real phone push notifications (Android 13 / API 33+ requires this explicitly) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Gallery access for picking videos and thumbnails.
-         On Android 13+ (API 33) we deliberately do NOT request
-         READ_MEDIA_VIDEO / READ_MEDIA_IMAGES. image_picker automatically
-         uses the Android Photo Picker on those versions, which grants
-         access to ONLY the single file the user picks — no broad gallery
-         permission is needed, and Google Play's Photo and Video Permissions
-         policy explicitly requires the Photo Picker for apps like ours with
-         infrequent, user-initiated media access.
-
-         The tools:node="remove" entries below are required because
-         image_picker and permission_handler each declare these permissions
-         in their own manifests; without an explicit removal they would be
-         merged into the final APK manifest and Play Console would keep
-         flagging them as undeclared broad permissions.
-
-         On Android 12 and below (API <= 32) there is no Photo Picker, so
-         READ_EXTERNAL_STORAGE is still needed and is capped at API 32. -->
+    <!-- Gallery access configuration for image_picker on Android 13+ -->
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -42,10 +26,6 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            <!-- Specifies an Android theme to apply to this Activity as soon as
-                 the Android process has started. This theme is visible to the user
-                 while the Flutter UI initializes. After that, this theme continues
-                 to determine the Window background behind the Flutter UI. -->
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
@@ -56,9 +36,6 @@
             </intent-filter>
 
             <!-- ====== OAuth success callback ====== -->
-            <!-- Deep link: lets the backend bounce the browser back into this app
-                 after a YouTube "Connect Channel" OAuth flow finishes
-                 (see backend/routes/youtube.js -> platform=mobile redirect). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -67,10 +44,6 @@
             </intent-filter>
 
             <!-- ====== "My Videos" share deep link ====== -->
-            <!-- Deep link: lets backend/routes/share.js's smart-link redirector
-                 (https://<backend>/v/<videoId>) bounce straight into this app
-                 when it's already installed, landing on My Videos with the
-                 shared video highlighted — see main.dart's _handleVideoDeepLink. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -78,13 +51,12 @@
                 <data android:scheme="tubepilot" android:host="video" />
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+
+        <!-- Flutter embedding & Firebase metadata -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Default push notification channel/icon for Firebase Cloud Messaging -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="tubepilot_default" />
@@ -92,15 +64,29 @@
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
     </application>
-    <!-- Required to query activities that can process text, see:
-         https://developer.android.com/training/package-visibility and
-         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
 
-         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <!-- ================================================= -->
+    <!-- API 33+ PACKAGE VISIBILITY & UPI INTENTS QUERIES  -->
+    <!-- ================================================= -->
     <queries>
+        <!-- Text processing intent -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- Generic UPI scheme view intent for payment SDKs -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+
+        <!-- Specific UPI Apps package visibility for Android 11+ / API 33+ -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- Google Pay -->
+        <package android:name="com.phonepe.app" />                         <!-- PhonePe -->
+        <package android:name="net.one97.paytm" />                         <!-- Paytm -->
+        <package android:name="in.org.npci.upiapp" />                      <!-- BHIM UPI -->
+        <package android:name="com.dreamplug.androidapp" />                <!-- CRED -->
+        <package android:name="in.amazon.mShop.android.shopping" />        <!-- Amazon Pay -->
     </queries>
 </manifest>

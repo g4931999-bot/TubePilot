@@ -248,7 +248,8 @@ class ApiService {
   // videos) + "My Videos" screen — real channel videos straight from
   // YouTube, not just TubePilot's own queued uploads.
   // ------ GET /api/youtube/my-videos ------ //
-  Future<Map<String, dynamic>> getMyYoutubeVideos() => _request('/youtube/my-videos');
+  // UPDATE14: `max` (default 25, backend caps at 100) - SEO / thumbnail screens ask for 100.
+  Future<Map<String, dynamic>> getMyYoutubeVideos({int max = 25}) => _request('/youtube/my-videos?max=$max');
 
   // ------ PATCH /api/youtube/my-videos/:videoId ------ //
   // (title/description/tags written straight to an already-live YouTube video)
@@ -309,6 +310,7 @@ class ApiService {
     Map<String, dynamic>? youtube,
     Map<String, dynamic>? facebook,
     Map<String, dynamic>? instagram,
+    bool autoSlot = false, // UPDATE16: scheduled upload, let the server pick the best time (needs Auto-Slotting ON)
   }) async {
     final videoMime = _lookupMimeOrDefault(videoPath, 'video/mp4');
     final files = [
@@ -325,6 +327,7 @@ class ApiService {
       if (youtube != null) 'youtube': jsonEncode(youtube),
       if (facebook != null) 'facebook': jsonEncode(facebook),
       if (instagram != null) 'instagram': jsonEncode(instagram),
+      if (autoSlot) 'autoSlot': 'true',
     };
 
     return uploadMultipart('/videos/upload', fields: fields, files: files);
@@ -341,6 +344,7 @@ class ApiService {
     String? postType,
     List<Map<String, dynamic>>? items,
     String? preferredTime, // 'HH:mm', defaults to 10:00 on the backend
+    bool autoSlot = false, // UPDATE16
   }) async {
     final files = <http.MultipartFile>[];
     for (final path in videoPaths) {
@@ -353,10 +357,17 @@ class ApiService {
       if (postType != null) 'postType': postType,
       if (items != null) 'items': jsonEncode(items),
       if (preferredTime != null) 'preferredTime': preferredTime,
+      if (autoSlot) 'autoSlot': 'true',
     };
 
     return uploadMultipart('/videos/bulk-upload', fields: fields, files: files);
   }
+
+  // ------ GET / PATCH /api/videos/auto-slotting (UPDATE16) ------ //
+  // GET -> { enabled, nextSlot (ISO|null), videosUsed, reason }
+  Future<Map<String, dynamic>> getAutoSlotting() => _request('/videos/auto-slotting');
+  Future<Map<String, dynamic>> setAutoSlotting(bool enabled) =>
+      _request('/videos/auto-slotting', method: 'PATCH', body: {'enabled': enabled});
 
   // ⚠️ NEW — "My Videos" screen: single combined list (TubePilot DB
   // records + real live YouTube channel videos, duplicates merged
@@ -490,6 +501,9 @@ class ApiService {
   // ---------------- Wallet ----------------
   // ------ GET /api/wallet ------ //
   Future<Map<String, dynamic>> getWallet() => _request('/wallet');
+
+  // UPDATE15: real auto-refund history (days = 7 | 30 | 90).
+  Future<Map<String, dynamic>> getRefundLogs({int days = 30}) => _request('/wallet/refunds?days=$days');
 
   // ---------------- AI (platform-aware) ----------------
   // ------ POST /api/ai/title ------ //
