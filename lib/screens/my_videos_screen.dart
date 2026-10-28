@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/language_provider.dart';
 import '../widgets/common.dart';
+import '../widgets/competitor_widgets.dart' show fmtCount, timeAgo;
 import 'diamond_store_screen.dart';
 import 'live_stream_screen.dart';
 
@@ -17,6 +18,10 @@ import 'live_stream_screen.dart';
 /// ⚠️ UPDATE (old video live): har video ke menu (⋯) mein "Live karein"
 /// aaya hai, aur AppBar mein Live icon — dono LiveOldVideosScreen kholte
 /// hain (live_stream_screen.dart). Live limits wahi screen sambhalti hai.
+///
+/// ⚠️ UPDATE (views + days ago): har video card mein title ke neeche
+/// "319 views · 146d ago" dikhta hai, bilkul Video SEO Optimizer ki tarah.
+/// Data keys: viewCount + publishedAt (publishedAt na ho to createdAt).
 class MyVideosScreen extends StatefulWidget {
   final String? highlightVideoId;
   const MyVideosScreen({super.key, this.highlightVideoId});
@@ -253,12 +258,24 @@ class _MyVideosScreenState extends State<MyVideosScreen> {
     );
   }
 
+  /// "319 views  ·  146d ago" - same line as the Video SEO Optimizer list.
+  /// Returns '' when the server sent neither views nor a date, so nothing is shown.
+  String _statsLine(Map<String, dynamic> item) {
+    final views = num.tryParse((item['viewCount'] ?? '').toString());
+    final ago = timeAgo(context, (item['publishedAt'] ?? item['createdAt'])?.toString());
+    return [
+      if (views != null) context.tr('sv_views').replaceAll('%1', fmtCount(views)),
+      if (ago.isNotEmpty) ago,
+    ].join('  ·  ');
+  }
+
   Widget _videoCard(Map<String, dynamic> item) {
     final thumb = (item['thumbnail'] ?? '').toString();
     final id = _idOf(item);
     final isHighlighted = id != null && id == _highlightedId;
     final cardKey = id != null ? (_cardKeys[id] ??= GlobalKey()) : null;
     final title = (item['title'] ?? '').toString().isNotEmpty ? item['title'].toString() : context.tr('apply_to_video_untitled');
+    final stats = _statsLine(item);
 
     return AnimatedContainer(
       key: cardKey,
@@ -294,14 +311,29 @@ class _MyVideosScreenState extends State<MyVideosScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () => _openEditSheet(item),
               child: Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    if (stats.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        stats,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: context.surfaces.textDim, fontSize: 11.5),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),

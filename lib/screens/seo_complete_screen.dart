@@ -5,16 +5,23 @@ import '../theme/app_theme.dart';
 import '../providers/language_provider.dart';
 import '../widgets/common.dart';
 
-/// Video SEO Optimizer - last step. Shows exactly what will change (the
-/// video's REAL current text vs the suggestion the user picked), then
-/// "Apply to YouTube" writes it with PATCH /youtube/my-videos/:id.
-/// Nothing is sent to YouTube until the user taps that button.
+String _tx(BuildContext c, String key, String fallback) {
+  final v = c.tr(key);
+  return (v.isEmpty || v == key) ? fallback : v;
+}
+
+/// Video SEO Optimizer - last step. Summary card (like the mockup) + the real
+/// before/after text. Nothing is sent to YouTube until the user taps
+/// "Apply to YouTube" (PATCH /youtube/my-videos/:id); rows turn to "Updated"
+/// only after that call succeeds.
 class SeoCompleteScreen extends StatefulWidget {
   final Map<String, dynamic> video;
   final String? newTitle;
   final String? newDescription;
   final List<String>? newTags;
-  const SeoCompleteScreen({super.key, required this.video, this.newTitle, this.newDescription, this.newTags});
+  final int? thumbScore;
+  final VoidCallback? onApplied;
+  const SeoCompleteScreen({super.key, required this.video, this.newTitle, this.newDescription, this.newTags, this.thumbScore, this.onApplied});
   @override
   State<SeoCompleteScreen> createState() => _SeoCompleteScreenState();
 }
@@ -27,6 +34,11 @@ class _SeoCompleteScreenState extends State<SeoCompleteScreen> {
   String get _oldDesc => (widget.video['description'] ?? '').toString();
   List<String> get _oldTags => ((widget.video['tags'] as List?) ?? []).map((e) => e.toString()).toList();
 
+  // old text is captured once, because the shared video map is updated after apply
+  late final String _beforeTitle = _oldTitle;
+  late final String _beforeDesc = _oldDesc;
+  late final String _beforeTags = _oldTags.join(', ');
+
   Future<void> _apply() async {
     setState(() => _applying = true);
     try {
@@ -37,10 +49,11 @@ class _SeoCompleteScreenState extends State<SeoCompleteScreen> {
         tags: widget.newTags,
       );
       if (mounted) {
-        // keep the shared video map in sync so the list / detail screens show the new text
+        // keep the shared video map in sync so the list / score screens show the new text
         if (widget.newTitle != null) widget.video['title'] = widget.newTitle;
         if (widget.newDescription != null) widget.video['description'] = widget.newDescription;
         if (widget.newTags != null) widget.video['tags'] = widget.newTags;
+        widget.onApplied?.call();
         setState(() => _applied = true);
         showToast(context, context.tr('so_applied_toast'), isSuccess: true);
       }
@@ -58,6 +71,33 @@ class _SeoCompleteScreenState extends State<SeoCompleteScreen> {
     if (widget.newTags != null) b.writeln('${context.tr('so_tab_tags')}:\n${widget.newTags!.join(', ')}');
     Clipboard.setData(ClipboardData(text: b.toString().trim()));
     showToast(context, context.tr('rd_copied'), isSuccess: true);
+  }
+
+  Widget _statusRow(IconData icon, String label, {String? valueText, bool pending = false, bool last = false}) {
+    final done = _applied && !pending;
+    final Widget trailing = valueText != null
+        ? Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(valueText, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            const SizedBox(width: 4),
+            const Icon(Icons.check_rounded, color: AppColors.green, size: 17),
+          ])
+        : Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+              done ? _tx(context, 'so_status_updated', 'Updated') : _tx(context, 'so_status_ready', 'Ready to apply'),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: done ? AppColors.green : context.surfaces.textDim),
+            ),
+            if (done) ...[const SizedBox(width: 4), const Icon(Icons.check_rounded, color: AppColors.green, size: 17)],
+          ]);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(border: last ? null : Border(bottom: BorderSide(color: context.surfaces.border))),
+      child: Row(children: [
+        Icon(icon, size: 20, color: AppColors.purple),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
+        trailing,
+      ]),
+    );
   }
 
   Widget _change(String labelKey, String before, String after) {
@@ -82,26 +122,55 @@ class _SeoCompleteScreenState extends State<SeoCompleteScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    if (widget.newTitle != null) rows.add(_statusRow(Icons.title_rounded, _tx(context, 'so_row_title', 'Optimized Title')));
+    if (widget.newDescription != null) rows.add(_statusRow(Icons.description_rounded, _tx(context, 'so_row_desc', 'Improved Description')));
+    if (widget.newTags != null) rows.add(_statusRow(Icons.sell_rounded, _tx(context, 'so_row_tags', 'Suggested Tags')));
+    if (widget.thumbScore != null) {
+      rows.add(_statusRow(Icons.image_rounded, _tx(context, 'so_row_thumb', 'Thumbnail Rating'), valueText: '${widget.thumbScore}/100', pending: true));
+    }
+    // last row without the bottom divider
+    final summary = <Widget>[];
+    for (var i = 0; i < rows.length; i++) {
+      summary.add(rows[i]);
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('video_seo_optimizer_title'))),
       body: ListView(padding: const EdgeInsets.all(20), children: [
         const SizedBox(height: 6),
         Center(
           child: Container(
-            width: 72,
-            height: 72,
+            width: 84,
+            height: 84,
             decoration: BoxDecoration(color: (_applied ? AppColors.green : AppColors.purple).withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: Icon(_applied ? Icons.check_circle_rounded : Icons.auto_awesome_rounded, size: 40, color: _applied ? AppColors.green : AppColors.purple),
+            child: Icon(_applied ? Icons.check_circle_rounded : Icons.auto_awesome_rounded, size: 44, color: _applied ? AppColors.green : AppColors.purple),
           ),
         ),
         const SizedBox(height: 14),
         Center(child: Text(context.tr('so_complete_title'), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
         const SizedBox(height: 6),
         Center(child: Text(context.tr(_applied ? 'so_complete_done' : 'so_complete_sub'), textAlign: TextAlign.center, style: TextStyle(color: context.surfaces.textDim, fontSize: 13, height: 1.4))),
-        if (widget.newTitle != null) _change('so_tab_title', _oldTitle, widget.newTitle!),
-        if (widget.newDescription != null) _change('so_tab_desc', _oldDesc, widget.newDescription!),
-        if (widget.newTags != null) _change('so_tab_tags', _oldTags.join(', '), widget.newTags!.join(', ')),
-        const SizedBox(height: 22),
+        if (summary.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(border: Border.all(color: context.surfaces.border), borderRadius: BorderRadius.circular(16)),
+            child: Column(children: summary),
+          ),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(_tx(context, 'so_see_changes', 'See exact changes'), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+            children: [
+              if (widget.newTitle != null) _change('so_tab_title', _beforeTitle, widget.newTitle!),
+              if (widget.newDescription != null) _change('so_tab_desc', _beforeDesc, widget.newDescription!),
+              if (widget.newTags != null) _change('so_tab_tags', _beforeTags, widget.newTags!.join(', ')),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         GradientButton(
           label: context.tr(_applied ? 'so_applied_btn' : 'so_apply_yt_btn'),
           icon: _applied ? Icons.check_rounded : Icons.cloud_upload_rounded,
@@ -111,8 +180,9 @@ class _SeoCompleteScreenState extends State<SeoCompleteScreen> {
         const SizedBox(height: 10),
         OutlinedButton.icon(onPressed: _copyAll, icon: const Icon(Icons.copy_rounded, size: 16), label: Text(context.tr('so_copy_all_btn'))),
         TextButton(
-          // complete -> detail -> video list
+          // complete -> analysis -> score -> video list
           onPressed: () => Navigator.of(context)
+            ..pop()
             ..pop()
             ..pop(),
           child: Text(context.tr('so_back_videos_btn')),
