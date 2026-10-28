@@ -1,15 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_cashfree_pg_sdk/api/cferrorresponse/cferrorresponse.dart';
-import 'package:flutter_cashfree_pg_sdk/api/cfpaymentgateway/cfpaymentgatewayservice.dart';
-import 'package:flutter_cashfree_pg_sdk/api/cfsession/cfsession.dart';
-import 'package:flutter_cashfree_pg_sdk/api/cfpayment/cfwebcheckoutpayment.dart';
-import 'package:flutter_cashfree_pg_sdk/utils/cfenums.dart';
-import 'package:flutter_cashfree_pg_sdk/utils/cfexceptions.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/payu_checkout.dart';
 import '../providers/language_provider.dart';
 import 'live_plans_screen.dart';
 
@@ -26,11 +20,8 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
   int balance = 0;
   bool loading = true;
   int? _payingDiamonds;
-  CFEnvironment _cashfreeEnvironment = CFEnvironment.PRODUCTION;
-  Timer? _paymentTimeoutTimer;
-  static const _paymentCallbackTimeout = Duration(seconds: 120);
 
-  final CFPaymentGatewayService _cfPaymentGatewayService = CFPaymentGatewayService();
+  final PayuCheckout _payu = PayuCheckout();
 
   Future<void> _openSupportEmail() async {
     final uri = Uri(scheme: 'mailto', path: supportEmail);
@@ -43,28 +34,20 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
   @override
   void initState() {
     super.initState();
-    _cfPaymentGatewayService.setCallback(_onVerify, _onError);
     _load();
-  }
-
-  @override
-  void dispose() {
-    _paymentTimeoutTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _load() async {
     setState(() => loading = true);
     try {
       final pkgRes = await ApiService.instance.getDiamondPackages();
+      debugPrint('[Diamond] packages loaded: ${pkgRes['packages']?.length}');
       setState(() {
         packages = pkgRes['packages'];
         balance = pkgRes['currentBalance'] ?? 0;
-        _cashfreeEnvironment = (pkgRes['cashfreeEnvironment'] == 'SANDBOX')
-            ? CFEnvironment.SANDBOX
-            : CFEnvironment.PRODUCTION;
       });
     } catch (e) {
+      debugPrint('[Diamond] load failed: $e');
       if (mounted) showApiError(context, e);
     } finally {
       if (mounted) setState(() => loading = false);
@@ -75,86 +58,20 @@ class _DiamondStoreScreenState extends State<DiamondStoreScreen> {
     if (_payingDiamonds != null) return;
     setState(() => _payingDiamonds = diamonds);
     try {
-      final res = await ApiService.instance.createCashfreeOrder(diamonds);
-      final orderId = res['orderId'] as String;
-      final paymentSessionId = res['paymentSessionId'] as String;
-
-      CFSession? session;
-      try {
-        session = CFSessionBuilder()
-            .setEnvironment(_cashfreeEnvironment)
-            .setOrderId(orderId)
-            .setPaymentSessionId(paymentSessionId)
-            .build();
-      } on CFException catch (e) {
-        if (mounted) {
-          setState(() => _payingDiamonds = null);
-          showToast(context, 'Session error: ${e.message}', isError: true);
-        }
-        return;
-      }
-
-      final cfWebCheckout = CFWebCheckoutPaymentBuilder()
-          .setSession(session!)
-          .build();
-
-      _cfPaymentGatewayService.doPayment(cfWebCheckout);
-      
-      _paymentTimeoutTimer?.cancel();
-      _paymentTimeoutTimer = Timer(_paymentCallbackTimeout, () {
-        if (!mounted || _payingDiamonds == null) return;
-        setState(() => _payingDiamonds = null);
-        showToast(context, 'Checkout timeout — please try again.', isError: true);
-      });
-
-    } on CFException catch (e) {
-      if (mounted) {
-        setState(() => _payingDiamonds = null);
-        showToast(context, e.message ?? 'Could not open checkout.', isError: true);
+      final r = await _payu.pay(diamonds);
+      if (!mounted) return;
+      if (r.approved) {
+        showToast(context, context.tr('payment_submitted_msg'), isSuccess: true);
+        _load();
+      } else if (r.status == 'pending') {
+        showToast(context, r.message, isError: false);
+      } else if (r.status != 'cancelled') {
+        showToast(context, r.message, isError: true);
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _payingDiamonds = null);
-        showApiError(context, e);
-      }
-    }
-  }
-
-  void _onVerify(String orderId) {
-    _paymentTimeoutTimer?.cancel();
-    _confirmWithBackend(orderId);
-  }
-
-  void _onError(CFErrorResponse errorResponse, String orderId) {
-    _paymentTimeoutTimer?.cancel();
-    _confirmWithBackend(orderId, sdkReportedError: errorResponse.getMessage());
-  }
-
-  Future<void> _confirmWithBackend(String orderId, {String? sdkReportedError}) async {
-    const maxAttempts = 8;
-    const delayBetweenAttempts = Duration(seconds: 3);
-    try {
-      for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-        final res = await ApiService.instance.verifyCashfreePayment(orderId);
-        final status = res['status'];
-        if (status == 'approved') {
-          if (mounted) {
-            showToast(context, context.tr('payment_submitted_msg'), isSuccess: true);
-            _load();
-          }
-          return;
-        }
-        if (status == 'rejected') {
-          if (mounted) showToast(context, sdkReportedError ?? 'Payment was not completed.', isError: true);
-          return;
-        }
-        if (attempt < maxAttempts) await Future.delayed(delayBetweenAttempts);
-      }
-      if (mounted) showToast(context, 'Payment will be credited automatically once confirmed.', isError: false);
-    } catch (e) {
+      debugPrint('[PayU] Buy failed: $e');
       if (mounted) showApiError(context, e);
     } finally {
-      _paymentTimeoutTimer?.cancel();
       if (mounted) setState(() => _payingDiamonds = null);
     }
   }

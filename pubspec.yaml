@@ -63,6 +63,7 @@ dependencies:
   mime: ^2.0.0
   share_plus: ^12.0.2
   package_info_plus: ^8.0.0
+  payu_checkoutpro_flutter: ^1.4.5
 
 dev_dependencies:
   flutter_test:

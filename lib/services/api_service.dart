@@ -13,7 +13,7 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// ⚠️ NEW: MultipartRequest jo upload ke dauraan bytes gin-ti hai (progress bar ke liye).
+/// MultipartRequest jo upload ke dauraan bytes gin-ti hai (progress bar ke liye).
 /// finalize() ki stream ko lazily transform karta hai, isliye back-pressure bana rehta hai —
 /// 2GB file memory mein nahi bharti, aur progress asli network speed ke hisaab se chalta hai.
 class _ProgressMultipartRequest extends http.MultipartRequest {
@@ -144,7 +144,7 @@ class ApiService {
     return data;
   }
 
-  /// ⚠️ NEW: ek file upload karta hai aur [onProgress] se (sent, total) bytes batata hai.
+  /// Ek file upload karta hai aur [onProgress] se (sent, total) bytes batata hai.
   /// Token expire hone par naya token lekar file dobara bhejta hai (MultipartFile ek baar hi
   /// use ho sakti hai, isliye retry mein file path se naya object banta hai).
   Future<Map<String, dynamic>> _uploadFileWithProgress(
@@ -244,15 +244,13 @@ class ApiService {
   // ------ DELETE /api/youtube/disconnect ------ //
   Future<Map<String, dynamic>> disconnectYoutube() => _request('/youtube/disconnect', method: 'DELETE');
 
-  // ⚠️ Option B ("Apply to Video" reaching already-published channel
-  // videos) + "My Videos" screen — real channel videos straight from
-  // YouTube, not just TubePilot's own queued uploads.
+  // "Apply to Video" reaching already-published channel videos + "My Videos" screen —
+  // real channel videos straight from YouTube, not just TubePilot's own queued uploads.
   // ------ GET /api/youtube/my-videos ------ //
-  // UPDATE14: `max` (default 25, backend caps at 100) - SEO / thumbnail screens ask for 100.
+  // `max` (default 25, backend caps at 100) - SEO / thumbnail screens ask for 100.
   Future<Map<String, dynamic>> getMyYoutubeVideos({int max = 25}) => _request('/youtube/my-videos?max=$max');
 
   // ------ PATCH /api/youtube/my-videos/:videoId ------ //
-  // (title/description/tags written straight to an already-live YouTube video)
   Future<Map<String, dynamic>> updateYoutubeVideoMetadata(
     String videoId, {
     String? title,
@@ -266,8 +264,6 @@ class ApiService {
       });
 
   // ------ PATCH /api/youtube/my-videos/:videoId/thumbnail ------ //
-  // (My Videos screen — thumbnail change for a video that only exists on
-  // YouTube, no matching TubePilot DB record)
   Future<Map<String, dynamic>> updateYoutubeThumbnail(String videoId, String thumbnailPath) async {
     final mime = _lookupMimeOrDefault(thumbnailPath, 'image/jpeg');
     final file = await http.MultipartFile.fromPath('thumbnail', thumbnailPath, contentType: mime);
@@ -275,16 +271,11 @@ class ApiService {
   }
 
   // ------ DELETE /api/youtube/my-videos/:videoId ------ //
-  // (My Videos screen — delete a video that only exists on YouTube,
-  // no matching TubePilot DB record)
   Future<Map<String, dynamic>> deleteYoutubeOnlyVideo(String videoId) =>
       _request('/youtube/my-videos/$videoId', method: 'DELETE');
 
   // ---------------- Meta (Facebook + Instagram) ----------------
-  // Since a Facebook Page's linked Instagram Business Account is
-  // auto-fetched by the backend at connect/select-page time, one OAuth
-  // flow + one status check now covers BOTH platforms — no separate
-  // Instagram connect endpoint exists or is needed.
+  // One OAuth flow + one status check covers BOTH platforms.
   // ------ GET /api/meta/oauth/url ------ //
   Future<Map<String, dynamic>> getMetaOAuthUrl() => _request('/meta/oauth/url?platform=mobile');
   // ------ GET /api/meta/status ------ //
@@ -295,11 +286,9 @@ class ApiService {
   Future<Map<String, dynamic>> selectMetaPage(String pageId) =>
       _request('/meta/select-page', method: 'PATCH', body: {'pageId': pageId});
   // ------ DELETE /api/meta/facebook/disconnect ------ //
-  // Disconnecting the Facebook Page always disconnects its linked
-  // Instagram account too (backend clears both in one call).
   Future<Map<String, dynamic>> disconnectFacebook() => _request('/meta/facebook/disconnect', method: 'DELETE');
 
-  // ---------------- Videos (backend/routes/video.js — multi-platform: YouTube + Facebook + Instagram) ----------------
+  // ---------------- Videos (backend/routes/video.js — multi-platform) ----------------
   // ------ POST /api/videos/upload ------ //
   Future<Map<String, dynamic>> uploadVideo({
     required String videoPath,
@@ -310,7 +299,7 @@ class ApiService {
     Map<String, dynamic>? youtube,
     Map<String, dynamic>? facebook,
     Map<String, dynamic>? instagram,
-    bool autoSlot = false, // UPDATE16: scheduled upload, let the server pick the best time (needs Auto-Slotting ON)
+    bool autoSlot = false, // scheduled upload, let the server pick the best time (needs Auto-Slotting ON)
   }) async {
     final videoMime = _lookupMimeOrDefault(videoPath, 'video/mp4');
     final files = [
@@ -336,15 +325,14 @@ class ApiService {
   // ------ POST /api/videos/bulk-upload ------ //
   /// up to 30 files in one request, backend auto-slots them across days
   /// (today skipped, plan's daily cap applied). [items] is a per-file
-  /// metadata list, index-aligned with [videoPaths]
-  /// (title/description/caption/tags/hashtags/category/playlist/audience/privacyStatus).
+  /// metadata list, index-aligned with [videoPaths].
   Future<Map<String, dynamic>> bulkUploadVideos({
     required List<String> videoPaths,
     required List<String> platforms,
     String? postType,
     List<Map<String, dynamic>>? items,
     String? preferredTime, // 'HH:mm', defaults to 10:00 on the backend
-    bool autoSlot = false, // UPDATE16
+    bool autoSlot = false,
   }) async {
     final files = <http.MultipartFile>[];
     for (final path in videoPaths) {
@@ -363,16 +351,14 @@ class ApiService {
     return uploadMultipart('/videos/bulk-upload', fields: fields, files: files);
   }
 
-  // ------ GET / PATCH /api/videos/auto-slotting (UPDATE16) ------ //
+  // ------ GET / PATCH /api/videos/auto-slotting ------ //
   // GET -> { enabled, nextSlot (ISO|null), videosUsed, reason }
   Future<Map<String, dynamic>> getAutoSlotting() => _request('/videos/auto-slotting');
   Future<Map<String, dynamic>> setAutoSlotting(bool enabled) =>
       _request('/videos/auto-slotting', method: 'PATCH', body: {'enabled': enabled});
 
-  // ⚠️ NEW — "My Videos" screen: single combined list (TubePilot DB
-  // records + real live YouTube channel videos, duplicates merged
-  // server-side). MUST be called as its own path — do not confuse with
-  // listVideos() below, which only returns TubePilot's own DB records.
+  // "My Videos" screen: single combined list (TubePilot DB records + real live YouTube videos).
+  // MUST be called as its own path — do not confuse with listVideos() below.
   // ------ GET /api/videos/library ------ //
   Future<Map<String, dynamic>> getVideoLibrary() => _request('/videos/library');
 
@@ -385,8 +371,6 @@ class ApiService {
   Future<Map<String, dynamic>> scheduleVideoPlatform(String id, String platform, String scheduledAt) =>
       _request('/videos/$id/schedule/$platform', method: 'PATCH', body: {'scheduledAt': scheduledAt});
   // ------ DELETE /api/videos/:id ------ //
-  // ⚠️ Backend now cascades this to a real YouTube delete too, when this
-  // video has an already-live YouTube target — see routes/video.js.
   Future<Map<String, dynamic>> cancelVideo(String id) => _request('/videos/$id', method: 'DELETE');
   // ------ PATCH /api/videos/:id/metadata ------ //
   Future<Map<String, dynamic>> updateVideoMetadata(
@@ -408,42 +392,51 @@ class ApiService {
       });
 
   // ------ PATCH /api/videos/:id/thumbnail ------ //
-  // (My Videos screen — thumbnail change for a video still in TubePilot's
-  // own queue/draft; backend forwards to YouTube instead if it's already live)
   Future<Map<String, dynamic>> updateDbVideoThumbnail(String id, String thumbnailPath) async {
     final mime = _lookupMimeOrDefault(thumbnailPath, 'image/jpeg');
     final file = await http.MultipartFile.fromPath('thumbnail', thumbnailPath, contentType: mime);
     return uploadMultipart('/videos/$id/thumbnail', method: 'PATCH', fields: {}, files: [file]);
   }
 
-  // ---------------- Diamonds (Cashfree) ----------------
-  // The old manual UPI/QR + screenshot + UTR flow (getPaymentSettings +
-  // POST /diamonds/purchase-request) is fully removed. Replaced by:
-  //   1. createCashfreeOrder() — backend creates a Cashfree order, returns
-  //      a paymentSessionId for the Cashfree Flutter SDK to open checkout.
-  //   2. verifyCashfreePayment() — called after the SDK checkout closes
-  //      (success OR failure/cancel); backend re-confirms directly with
-  //      Cashfree's server before crediting diamonds — never trust the
-  //      SDK's client-side result alone.
+  // ---------------- Diamonds (PayU) ----------------
+  // Flow:
+  //   1. createPayuOrder()  — backend creates a pending order, returns `payu` params
+  //                           (key, txnid, amount, surl/furl ...) for the PayU Flutter SDK.
+  //   2. payuHash()         — the SDK asks for hashes; backend signs them with the secret salt
+  //                           (only for this user's own pending order, exact amount).
+  //   3. verifyPayuPayment()— after checkout closes; backend re-confirms directly with PayU's
+  //                           server before crediting diamonds — never trust the SDK alone.
   // ------ GET /api/diamonds/packages ------ //
   Future<Map<String, dynamic>> getDiamondPackages() => _request('/diamonds/packages');
 
   // ------ POST /api/diamonds/create-order ------ //
-  Future<Map<String, dynamic>> createCashfreeOrder(int diamondPackage) =>
+  Future<Map<String, dynamic>> createPayuOrder(int diamondPackage) =>
       _request('/diamonds/create-order', method: 'POST', body: {'diamondPackage': diamondPackage});
 
   // ------ POST /api/diamonds/verify-payment ------ //
-  Future<Map<String, dynamic>> verifyCashfreePayment(String orderId) =>
+  Future<Map<String, dynamic>> verifyPayuPayment(String orderId) =>
       _request('/diamonds/verify-payment', method: 'POST', body: {'orderId': orderId});
+
+  // ------ POST /api/diamonds/payu/hash ------ //
+  Future<Map<String, dynamic>> payuHash({
+    required String hashName,
+    required String hashString,
+    String? hashType,
+    String? postSalt,
+  }) =>
+      _request('/diamonds/payu/hash', method: 'POST', body: {
+        'hashName': hashName,
+        'hashString': hashString,
+        if (hashType != null) 'hashType': hashType,
+        if (postSalt != null) 'postSalt': postSalt,
+      });
+
+  // Old names kept so cashfree_checkout.dart / Live Plans (still on Cashfree) keep compiling.
+  Future<Map<String, dynamic>> createCashfreeOrder(int diamondPackage) => createPayuOrder(diamondPackage);
+  Future<Map<String, dynamic>> verifyCashfreePayment(String orderId) => verifyPayuPayment(orderId);
 
   // ------ GET /api/diamonds/my-requests ------ //
   Future<Map<String, dynamic>> myPurchaseRequests() => _request('/diamonds/my-requests');
-
-// -----------------------------------------------------------------------
-// ⚠️ YE POORA BLOCK apni api_service.dart file mein daalo — jahan
-// "// ---------------- Diamonds (Cashfree) ----------------" section
-// khatam hota hai, uske turant baad (myPurchaseRequests() ke neeche).
-// -----------------------------------------------------------------------
 
   // ---------------- Live Streaming Plans (Day Pass / Month Pass) ----------------
   // ------ GET /api/live-plans ------ //
@@ -459,7 +452,6 @@ class ApiService {
 
   // ---------------- Live Streaming (upload + start/stop/status) ----------------
   // ------ POST /api/live-stream/upload-video ------ //
-  // ⚠️ UPDATE: ab [onProgress] se upload ka (sent, total) bytes milta hai — progress bar ke liye.
   Future<Map<String, dynamic>> uploadLiveVideo(
     String videoPath, {
     void Function(int sent, int total)? onProgress,
@@ -483,8 +475,7 @@ class ApiService {
       });
 
   // ------ POST /api/live-stream/start-camera ------ //
-  // ⚠️ NEW: phone camera se live. Response: { streamId, rtmpUrl, streamKey, watchUrl,
-  // secondsAllowed, isFreeTrial, ... } — app inhi se camera ko YouTube par bhejti hai.
+  // Phone camera se live. Response: { streamId, rtmpUrl, streamKey, watchUrl, secondsAllowed, isFreeTrial, ... }
   Future<Map<String, dynamic>> startCameraLive({String? title, String? description}) =>
       _request('/live-stream/start-camera', method: 'POST', body: {
         if (title != null) 'title': title,
@@ -497,12 +488,12 @@ class ApiService {
 
   // ------ GET /api/live-stream/status/:streamId ------ //
   Future<Map<String, dynamic>> getLiveStreamStatus(String streamId) => _request('/live-stream/status/$streamId');
-  
+
   // ---------------- Wallet ----------------
   // ------ GET /api/wallet ------ //
   Future<Map<String, dynamic>> getWallet() => _request('/wallet');
 
-  // UPDATE15: real auto-refund history (days = 7 | 30 | 90).
+  // Real auto-refund history (days = 7 | 30 | 90).
   Future<Map<String, dynamic>> getRefundLogs({int days = 30}) => _request('/wallet/refunds?days=$days');
 
   // ---------------- AI (platform-aware) ----------------
@@ -546,9 +537,7 @@ class ApiService {
   // ------ GET /api/analytics/competitors ------ //
   Future<Map<String, dynamic>> listCompetitors() => _request('/analytics/competitors');
 
-  /// Live channel-name search for the Competitor Radar "add competitor"
-  /// autocomplete (e.g. typing "tube" returns matching real YouTube
-  /// channels with name + thumbnail + channelId).
+  /// Live channel-name search for the Competitor Radar "add competitor" autocomplete.
   // ------ GET /api/analytics/competitors/search ------ //
   Future<Map<String, dynamic>> searchCompetitors(String query) =>
       _request('/analytics/competitors/search?q=${Uri.encodeQueryComponent(query)}');
