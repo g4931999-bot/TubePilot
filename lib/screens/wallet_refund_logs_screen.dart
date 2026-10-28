@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/language_provider.dart';
 import '../widgets/common.dart';
+import '../widgets/app_brand_background.dart';
 import 'diamond_store_screen.dart';
 
 /// Wallet & Refund Logs (UPDATE15 UI upgrade).
@@ -145,6 +146,15 @@ class _WalletRefundLogsScreenState extends State<WalletRefundLogsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Festival background wrapper — shows the shared festival image when
+    // festival mode is on, and draws nothing extra when it is off.
+    return AppBrandBackground(
+      watermarkWhenNormal: false,
+      child: _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(context.tr('wallet_refund_logs_title'))),
       body: _loading

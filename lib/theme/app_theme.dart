@@ -15,6 +15,13 @@ class AppColors {
                                                   // diamond/currency icon doesn't blend into
                                                   // primary-colored UI chrome around it.
 
+  // ---------------- FESTIVAL ACCENTS (additive) ----------------
+  // Used by the festival background system. Approximate values — tune to
+  // match the final festival artwork. Existing screens don't reference these.
+  static const festivalIvory = Color(0xFFFFF8EC);    // warm ivory base behind festival image
+  static const festivalGold = Color(0xFFE2C275);     // soft gold accent
+  static const festivalMagenta = Color(0xFF8A1F62);  // dark magenta accent
+
   static const gradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -68,6 +75,18 @@ class AppTheme {
     text: AppColors.darkText,
     textDim: AppColors.darkTextDim,
   );
+
+  /// Used by AppBrandBackground (only while a background image is showing)
+  /// so the Scaffold/AppBar inside it don't paint an opaque colour over the
+  /// image. Applied to that subtree only — the app-wide theme is untouched.
+  static ThemeData withTransparentSurfaces(ThemeData base) {
+    return base.copyWith(
+      scaffoldBackgroundColor: Colors.transparent,
+      appBarTheme: base.appBarTheme.copyWith(
+        backgroundColor: Colors.transparent,
+      ),
+    );
+  }
 
   static ThemeData _build({
     required Brightness brightness,

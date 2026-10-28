@@ -8,6 +8,7 @@ import '../providers/language_provider.dart';
 import '../widgets/common.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/custom_dropdown.dart';
+import '../widgets/app_brand_background.dart';
 
 class UploadScreen extends StatefulWidget {
   final bool embedded;
@@ -813,6 +814,15 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Festival background wrapper — shows the shared festival image when
+    // festival mode is on, and draws nothing extra when it is off.
+    return AppBrandBackground(
+      watermarkWhenNormal: false,
+      child: _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     final categories = _categories(context);
     final audienceLabels = _audienceLabels(context);
     final privacyLabels = _privacyLabels(context);

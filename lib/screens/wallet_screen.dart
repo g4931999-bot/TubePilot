@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/app_brand_background.dart';
 import '../providers/language_provider.dart';
 
 class WalletScreen extends StatefulWidget {
@@ -54,6 +55,15 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    // Festival background wrapper — shows the shared festival image when
+    // festival mode is on, and draws nothing extra when it is off.
+    return AppBrandBackground(
+      watermarkWhenNormal: false,
+      child: _buildScreen(context),
+    );
+  }
+
+  Widget _buildScreen(BuildContext context) {
     final all = (wallet?['transactions'] as List?) ?? [];
     final purchasesOnly = all.where((t) => t['type'] == 'diamond_purchase').toList();
 

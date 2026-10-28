@@ -85,6 +85,7 @@ flutter:
     - assets/onboarding_upload.png
     - assets/onboarding_anywhere.png
     - assets/onboarding_ai.png
+     - assets/images/diwali_bg.png
     # ⚠️ NEW (Boss request — Visual Analyzer "Fix it with AI" card): real
     # transparent Gemini logo, used in visual_analyzer_screen.dart.
     - assets/gemini_icon.png
