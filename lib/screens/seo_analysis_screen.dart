@@ -292,11 +292,11 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   Future<void> _generateTitles() async {
-    if (_free) { _goUpgrade(); return; }
+    if (_free) return _goUpgrade();
     if (_genTitles) return;
     setState(() => _genTitles = true);
     try {
-      final res = await ApiService.instance.aiTitleOptions(_topic(), count: 5);
+      final res = await ApiService.instance.aiSeoTitleOptions(_topic(), count: 5);
       final list = _asStrings(res['titles'], ['title', 'text']);
       SeoAnalysisScreen.titleCache[_vid] = list;
       if (mounted) {
@@ -314,11 +314,11 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   Future<void> _generateDescs() async {
-    if (_free) { _goUpgrade(); return; }
+    if (_free) return _goUpgrade();
     if (_genDescs) return;
     setState(() => _genDescs = true);
     try {
-      final res = await ApiService.instance.aiDescriptionOptions(_topic(), count: 3);
+      final res = await ApiService.instance.aiSeoDescriptionOptions(_topic(), count: 3);
       final list = _asStrings(res['descriptions'], ['description', 'text']);
       SeoAnalysisScreen.descCache[_vid] = list;
       if (mounted) {
@@ -335,7 +335,7 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   void _improveWithAi() {
-    if (_free) { _goUpgrade(); return; }
+    if (_free) return _goUpgrade();
     setState(() => _tab = 1);
     if (_titles.isEmpty) _generateTitles();
   }

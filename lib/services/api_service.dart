@@ -508,6 +508,17 @@ class ApiService {
   // ------ POST /api/ai/description-options ------ //
   Future<Map<String, dynamic>> aiDescriptionOptions(String topic, {int count = 4}) =>
       _request('/ai/description-options', method: 'POST', body: {'topic': topic, 'count': count});
+
+  // ⚠️ NEW: Video SEO Optimizer versions of the two calls above. Same result,
+  // but the SERVER only allows them for users with a paid pack (402
+  // PLAN_UPGRADE_REQUIRED otherwise), so a free user can't bypass the blur.
+  // ------ POST /api/ai/seo-title-options ------ //
+  Future<Map<String, dynamic>> aiSeoTitleOptions(String topic, {int count = 5}) =>
+      _request('/ai/seo-title-options', method: 'POST', body: {'topic': topic, 'count': count});
+  // ------ POST /api/ai/seo-description-options ------ //
+  Future<Map<String, dynamic>> aiSeoDescriptionOptions(String topic, {int count = 3}) =>
+      _request('/ai/seo-description-options', method: 'POST', body: {'topic': topic, 'count': count});
+
   // ------ POST /api/ai/tags ------ //
   Future<Map<String, dynamic>> aiTags(String topic) => _request('/ai/tags', method: 'POST', body: {'topic': topic});
   // ------ POST /api/ai/caption ------ //
