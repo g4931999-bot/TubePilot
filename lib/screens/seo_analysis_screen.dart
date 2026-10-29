@@ -292,7 +292,7 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   Future<void> _generateTitles() async {
-    if (_free) return _goUpgrade();
+    if (_free) { _goUpgrade(); return; }
     if (_genTitles) return;
     setState(() => _genTitles = true);
     try {
@@ -314,7 +314,7 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   Future<void> _generateDescs() async {
-    if (_free) return _goUpgrade();
+    if (_free) { _goUpgrade(); return; }
     if (_genDescs) return;
     setState(() => _genDescs = true);
     try {
@@ -335,7 +335,7 @@ class _SeoAnalysisScreenState extends State<SeoAnalysisScreen> {
   }
 
   void _improveWithAi() {
-    if (_free) return _goUpgrade();
+    if (_free) { _goUpgrade(); return; }
     setState(() => _tab = 1);
     if (_titles.isEmpty) _generateTitles();
   }

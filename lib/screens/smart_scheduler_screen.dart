@@ -239,6 +239,27 @@ class _SmartSchedulerScreenState extends State<SmartSchedulerScreen> {
   }
 
   // ───── UI ─────
+  // UPDATE21: compact pill button so the text never touches the border / overflows.
+  Widget _pill({required VoidCallback onTap, required IconData icon, required String text, double maxWidth = 170}) => ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: OutlinedButton(
+          onPressed: onTap,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            minimumSize: const Size(0, 38),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(color: context.surfaces.border),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 16),
+            const SizedBox(width: 6),
+            Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+          ]),
+        ),
+      );
+
   Widget _box({required Widget child, EdgeInsets? margin}) => Container(
         margin: margin,
         padding: const EdgeInsets.all(14),
@@ -367,15 +388,18 @@ class _SmartSchedulerScreenState extends State<SmartSchedulerScreen> {
         child: ListView(padding: const EdgeInsets.all(20), children: [
           Row(children: [
             Expanded(child: Text(context.tr('ss_subtitle'), style: TextStyle(color: context.surfaces.textDim, fontSize: 12.5))),
-            OutlinedButton.icon(onPressed: _pickTimezone, icon: const Icon(Icons.public_rounded, size: 16), label: Text(_offsetLabel(_offset), style: const TextStyle(fontSize: 12))),
+            const SizedBox(width: 12),
+            _pill(onTap: _pickTimezone, icon: Icons.public_rounded, text: _offsetLabel(_offset), maxWidth: 130),
           ]),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: Text(context.tr('audience_peak_activity'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15))),
-            OutlinedButton.icon(
-              onPressed: _pickRange,
-              icon: const Icon(Icons.expand_more_rounded, size: 18),
-              label: Text(_rangeDays == 0 ? context.tr('ss_range_all') : context.tr('wr_last_days').replaceAll('%1', '$_rangeDays'), style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 12),
+            _pill(
+              onTap: _pickRange,
+              icon: Icons.expand_more_rounded,
+              text: _rangeDays == 0 ? context.tr('ss_range_all') : context.tr('wr_last_days').replaceAll('%1', '$_rangeDays'),
+              maxWidth: 160,
             ),
           ]),
           const SizedBox(height: 4),
